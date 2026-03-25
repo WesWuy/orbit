@@ -7,6 +7,7 @@
 
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform } from 'react-native'
 import { useState } from 'react'
+import { useRouter } from 'expo-router'
 import { useOrbitEngine } from '../hooks/useOrbitEngine'
 import { Mode } from '../engine/mode-manager'
 
@@ -28,7 +29,16 @@ const MODE_COLORS: Record<Mode, string> = {
   [Mode.CONVERSE]: '#ec4899',
 }
 
+// Mode -> screen route mapping
+const MODE_ROUTES: Partial<Record<Mode, string>> = {
+  [Mode.FOCUS]: '/focus',
+  [Mode.GUIDE]: '/guide',
+  [Mode.CAPTURE]: '/capture',
+  [Mode.CONVERSE]: '/converse',
+}
+
 export default function HomeScreen() {
+  const router = useRouter()
   const { state, switchMode, wake, processCommand } = useOrbitEngine()
   const [commandInput, setCommandInput] = useState('')
   const [commandLog, setCommandLog] = useState<{ text: string; result: string; success: boolean }[]>([])
@@ -101,7 +111,11 @@ export default function HomeScreen() {
                     styles.modeBtn,
                     state.mode === m && { backgroundColor: (MODE_COLORS[m] ?? '#3b82f6') + '30', borderColor: MODE_COLORS[m] },
                   ]}
-                  onPress={() => switchMode(m)}
+                  onPress={() => {
+                    switchMode(m)
+                    const route = MODE_ROUTES[m]
+                    if (route) router.push(route as any)
+                  }}
                 >
                   <Text style={styles.modeBtnIcon}>{MODE_ICONS[m]}</Text>
                   <Text style={[styles.modeBtnLabel, state.mode === m && { color: MODE_COLORS[m] }]}>

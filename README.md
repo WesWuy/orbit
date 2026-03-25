@@ -1,82 +1,119 @@
 # Orbit
 
-**Personal aerial AI companion — simulation-first prototype**
+**Your AI buddy that sees the world with you.**
 
-Orbit is a small, intelligent hovering companion that stays near the user, surfaces real-time contextual information, and autonomously returns to a backpack charging dock when idle or low on power.
+Orbit is an AI companion app that lives on your phone. Point it at stuff and it tells you what it is. Ask it to remember places. Get guided anywhere with a magic compass. Talk to it like a friend.
 
-> **This is a simulation-only project.** No real-world autonomous flight code is included. Real hardware integration requires explicit safety review.
+It's like having a curious, helpful sidekick in your pocket.
 
-## Quick Start
+## What Can Orbit Do?
 
-### Backend (Python)
+| Mode | What It Does | How You Use It |
+|------|-------------|----------------|
+| **Focus** | "What am I looking at?" — point your camera at anything and Orbit explains it | Tap the Focus button, aim your phone |
+| **Guide** | "Take me there" — a compass arrow and audio pings guide you to any destination | Say "guide me to the park" |
+| **Capture** | "Remember this" — saves a photo + location + AI description to your memory | Tap Capture when you see something cool |
+| **Converse** | "Let's chat" — talk to Orbit about anything, it knows where you are and what you've seen | Open Converse and start typing or talking |
+| **Ambient** | Orbit hangs out in the background, ready when you need it | The default — just vibing |
+| **Sleep** | Low power mode — Orbit rests until you wake it up | Say "sleep" or "goodnight" |
+
+## Try It Out
+
+### Phone App (Gen 1 MVP)
 
 ```bash
-cd orbit-server
-python -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
-pip install -e ".[dev]"
-python -m orbit.main
-```
-
-Server runs at `http://localhost:8000`. API docs at `http://localhost:8000/docs`.
-
-### Frontend (React)
-
-```bash
-cd orbit-ui
+cd orbit-app
 npm install
-npm run dev
+npx expo start --web    # runs in your browser
+# or
+npx expo start          # scan QR with Expo Go on your phone
 ```
 
-UI runs at `http://localhost:3000` and proxies API/WebSocket to the backend.
+### Drone Simulation (Gen 0 — the backstory)
 
-### Run Tests
+Orbit started as a drone simulation. The full flight sim still works:
 
 ```bash
-cd orbit-server
-pytest
+# Backend
+cd orbit-runtime
+pip install -e ".[dev]"
+python -m orbit.main        # API at http://localhost:8000
+
+# Dashboard
+cd orbit-companion
+npm install
+npm run dev                  # UI at http://localhost:3000
 ```
 
-## Architecture
+## The Big Idea
 
-Orbit is two runtimes connected by a comms protocol:
+**Gen 1:** Your phone IS Orbit. It uses the phone's own camera, GPS, and compass to be your AI companion. No special hardware needed.
+
+**Gen 2:** Orbit gets a body — a small drone that flies around you, sees the world from above, and docks on your backpack when it's done. The same brain, just with wings.
+
+The cool part: the exact same AI that works in your hand today will power the drone tomorrow. We built it that way on purpose.
+
+## How It Works (Under the Hood)
 
 ```
-┌──────────────────────┐         ┌──────────────────────┐
-│   ORBIT RUNTIME      │  WiFi/  │  ORBIT COMPANION     │
-│   (onboard drone)    │◄──WS───►│  (phone app)         │
-│                       │         │                       │
-│  - Safety supervisor  │         │  - Dashboard UI       │
-│  - Mode manager FSM   │         │  - Command input      │
-│  - Flight controllers │         │  - Telemetry display  │
-│  - Local fallbacks    │         │  - AI brain (future)  │
-│  - Vehicle adapter    │         │  - Session logging    │
-└──────────────────────┘         └──────────────────────┘
+orbit-app/              The phone app (React Native + Expo)
+├── engine/             The brain — modes, intent parsing, context, personality
+├── sensors/            SensorAdapter — wraps phone GPS/compass/camera
+├── services/           AI vision, memory store, spatial audio, voice
+├── hooks/              React hooks connecting brain to UI
+└── app/                Screens — home, focus, guide, capture, converse
+
+orbit-runtime/          The drone brain (Python + FastAPI) — Gen 0/Gen 2
+├── core/               Flight controllers, mode FSM, orchestrator
+├── safety/             Safety supervisor — mandatory command gateway
+├── adapters/           Vehicle abstraction (sim today, real drone later)
+├── protocol/           Typed WebSocket messages between drone and phone
+└── brain/              Intent parser, context engine, explainer
+
+orbit-companion/        The drone dashboard (React + TypeScript) — Gen 0
 ```
 
-**The drone flies safely without the phone.** The phone is a companion UI, not the flight-critical brain.
+**The key trick:** `SensorAdapter` is an interface. Today it reads your phone's GPS. Tomorrow it reads a drone's telemetry. The app doesn't care which one — it just works.
 
-- **Safety Supervisor** is a mandatory gateway — every command passes through it
-- **Vehicle Adapter** is abstract — today it's a lightweight physics sim, tomorrow it's PX4 SITL
-- **Mode Manager** is an explicit FSM: idle → orbit → focus → guide → capture → dock
-- **Phone disconnect:** Hold → cautious descent → auto-land. Safety never depends on the phone.
+## Modes (Phone App)
 
-## Modes
+Orbit has a brain that thinks in **modes** — like switching between different superpowers:
 
-| Mode | Behavior |
-|------|----------|
-| Idle | Armed, hovering, waiting for commands |
-| Orbit | Circling around the target at configurable radius |
-| Focus | Holding position near target, facing it |
-| Guide | Following waypoints / navigation (stub) |
-| Capture | Stable hover for camera/recording |
-| Dock | Returning to backpack dock and landing |
+```
+SLEEP → AMBIENT → FOCUS / GUIDE / CAPTURE / CONVERSE → SLEEP
+```
 
-## Safety
+Each mode changes what Orbit pays attention to and how it helps you. The mode manager makes sure transitions are valid (you can't jump from Sleep straight to Guide without waking up first).
 
-- Emergency stop is always allowed and cannot be blocked
-- Battery critical → automatic landing
-- Link loss → automatic landing
-- Speed and altitude hard limits
-- Geofence enforcement
-- All commands validated before execution
+## Safety (Drone Mode)
+
+When Orbit has a drone body (Gen 2), safety is serious:
+
+- Emergency stop always works — nothing can block it
+- Low battery = automatic landing, no exceptions
+- Phone disconnects? Drone lands itself safely
+- Speed limits, altitude limits, geofence — all enforced
+- Every single command goes through the Safety Supervisor first
+
+**The drone flies safely even if the phone dies.** The phone is a companion, not the pilot.
+
+## Tech Stack
+
+- **Phone App:** React Native, Expo, TypeScript
+- **Drone Backend:** Python, FastAPI, WebSocket
+- **AI:** Claude/GPT vision APIs (mock mode for offline dev)
+- **Database:** SQLite on device (in-memory for web)
+- **Tests:** 37 passing (drone backend)
+
+## Project Status
+
+- [x] Gen 0 — Full drone simulation with safety supervisor, 7 flight modes, 37 tests
+- [x] Gen 1 Phase 1 — Phone app skeleton with sensor pipeline and mode FSM
+- [x] Gen 1 Phase 2 — Focus mode (camera + AI vision)
+- [x] Gen 1 Phase 3 — Capture mode (memory store + location)
+- [x] Gen 1 Phase 4 — Guide mode (compass navigation)
+- [x] Gen 1 Phase 5 — Converse mode (AI chat)
+- [ ] Voice input (speech-to-text)
+- [ ] Real camera integration (expo-camera on device)
+- [ ] Cloud AI backend (orbit-cloud)
+- [ ] Gen 2 — Pair with a real drone
