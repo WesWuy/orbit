@@ -3,6 +3,9 @@
     "name": "Orbit",
     "slug": "orbit-app",
     "version": "0.1.0",
+    "experiments": {
+      "baseUrl": "/orbit"
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
