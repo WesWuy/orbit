@@ -12,6 +12,7 @@ export enum IntentType {
   GUIDE = 'guide',           // "take me to", "navigate", "guide me"
   CAPTURE = 'capture',       // "remember this", "save this", "bookmark"
   CONVERSE = 'converse',     // "let's talk", "hey orbit"
+  EFFICIENCY = 'efficiency', // "plan my day", "habits", "schedule"
   SLEEP = 'sleep',           // "sleep", "goodnight", "stop"
   AMBIENT = 'ambient',       // "ambient", "chill", "passive"
   SEARCH_MEMORY = 'search_memory', // "where was", "find the", "show me that"
@@ -42,6 +43,10 @@ const PATTERNS: { type: IntentType; keywords: string[]; extract?: (text: string)
   {
     type: IntentType.CAPTURE,
     keywords: ['remember this', 'save this', 'bookmark', 'save this spot', 'capture', 'save location', 'remember'],
+  },
+  {
+    type: IntentType.EFFICIENCY,
+    keywords: ['plan my day', 'schedule', 'habits', 'routine', 'time block', 'efficiency', 'plan today', 'organize my day', 'life architect', 'what should i do', 'daily plan'],
   },
   {
     type: IntentType.CONVERSE,

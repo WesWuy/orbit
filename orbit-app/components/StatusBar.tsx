@@ -1,5 +1,7 @@
 /**
- * Orbit Status Bar — compact header for mode screens.
+ * Orbit Status Bar — cosmic header for mode screens.
+ *
+ * Glassmorphism bar with mode glow, floating back arrow.
  */
 
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native'
@@ -13,15 +15,15 @@ interface Props {
 
 export function OrbitStatusBar({ mode, modeColor, statusLine, onBack }: Props) {
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { borderBottomColor: modeColor + '20' }]}>
       <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-        <Text style={styles.backText}>← Back</Text>
+        <Text style={[styles.backText, { color: modeColor + '90' }]}>←</Text>
       </TouchableOpacity>
       <View style={styles.center}>
-        <View style={[styles.dot, { backgroundColor: modeColor }]} />
+        <View style={[styles.dot, { backgroundColor: modeColor, shadowColor: modeColor }]} />
         <Text style={[styles.mode, { color: modeColor }]}>{mode.toUpperCase()}</Text>
       </View>
-      <Text style={styles.status}>{statusLine}</Text>
+      <Text style={[styles.status, { color: modeColor + '60' }]}>{statusLine}</Text>
     </View>
   )
 }
@@ -34,15 +36,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#1f293740',
+    backgroundColor: 'rgba(255,255,255,0.02)',
   },
   backBtn: {
     paddingVertical: 4,
     paddingRight: 12,
   },
   backText: {
-    color: '#6b7280',
-    fontSize: 13,
+    fontSize: 18,
+    fontWeight: '300',
   },
   center: {
     flexDirection: 'row',
@@ -55,12 +57,12 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   mode: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
-    letterSpacing: 1.5,
+    letterSpacing: 2,
   },
   status: {
-    fontSize: 11,
-    color: '#6b7280',
+    fontSize: 10,
+    letterSpacing: 0.5,
   },
 })

@@ -1,21 +1,32 @@
 /**
- * Guide Mode — spatial navigation with AR arrow.
+ * Guide Mode — Merope as Navigation Expert.
  *
- * Tell Orbit where you want to go. It guides you with a compass arrow
- * and distance countdown. On mobile, adds spatial audio pings.
+ * Tell Merope where you want to go. She guides you with a compass arrow
+ * and distance countdown. Cosmic glassmorphism aesthetic.
  */
 
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Platform } from 'react-native'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'expo-router'
 import { OrbitStatusBar } from '../components/StatusBar'
+import { Starfield } from '../components/Starfield'
+import { GlassCard } from '../components/GlassCard'
+import { FloatingMerope } from '../components/FloatingMerope'
 import { useOrbitEngine } from '../hooks/useOrbitEngine'
+import { useMerope } from '../hooks/useMerope'
+import { Mode } from '../engine/mode-manager'
+import { MODE_EXPERTISE, getMeropeEmotion } from '../engine/merope'
+import { playTone } from '../services/sound-engine'
+import { tapLight, tapMedium, notifySuccess } from '../services/haptics'
 import { LocationTracker, type GuideState } from '../services/location-tracker'
 import { relativeBearing } from '../lib/geo-utils'
+
+const GUIDE_COLOR = MODE_EXPERTISE[Mode.GUIDE].color
 
 export default function GuideScreen() {
   const router = useRouter()
   const { state } = useOrbitEngine()
+  const { merope } = useMerope(Mode.GUIDE, state.context)
   const tracker = useRef(new LocationTracker()).current
   const [guideState, setGuideState] = useState<GuideState>({
     destination: null, distanceM: 0, bearingDeg: 0, arrived: false,
@@ -23,13 +34,14 @@ export default function GuideScreen() {
   const [destInput, setDestInput] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  // Update guide state when sensors change
   useEffect(() => {
     const loc = state.sensors.location
     if (loc && tracker.destination) {
       setGuideState(tracker.getGuideState(loc.lat, loc.lng))
     }
   }, [state.sensors, tracker])
+
+  const meropeEmotion = getMeropeEmotion(Mode.GUIDE, false)
 
   const handleSetDestination = () => {
     if (!destInput.trim()) return
@@ -38,13 +50,12 @@ export default function GuideScreen() {
       tracker.setDestination(dest)
       setError(null)
       setDestInput('')
-      // Immediately compute guide state
+      playTone('navigate')
+      tapMedium()
       const loc = state.sensors.location
-      if (loc) {
-        setGuideState(tracker.getGuideState(loc.lat, loc.lng))
-      }
+      if (loc) setGuideState(tracker.getGuideState(loc.lat, loc.lng))
     } else {
-      setError(`I don't know where "${destInput}" is yet. Try: parliament, market, gallery, canal, park`)
+      setError(`Merope doesn't know "${destInput}" yet. Try: parliament, market, gallery, canal, park`)
     }
   }
 
@@ -53,7 +64,6 @@ export default function GuideScreen() {
     setGuideState({ destination: null, distanceM: 0, bearingDeg: 0, arrived: false })
   }
 
-  // Arrow rotation: relative bearing from user heading to target
   const relBearing = guideState.destination
     ? relativeBearing(state.sensors.heading_deg, guideState.bearingDeg)
     : 0
@@ -64,137 +74,164 @@ export default function GuideScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <OrbitStatusBar
-        mode="Guide"
-        modeColor="#10b981"
-        statusLine={state.statusLine}
-        onBack={() => router.back()}
-      />
+    <Starfield modeColor={GUIDE_COLOR} starCount={30}>
+      <View style={styles.container}>
+        <OrbitStatusBar
+          mode="Guide"
+          modeColor={GUIDE_COLOR}
+          statusLine={state.statusLine}
+          onBack={() => router.back()}
+        />
 
-      {!guideState.destination ? (
-        /* Destination input */
-        <View style={styles.inputArea}>
-          <Text style={styles.prompt}>Where do you want to go?</Text>
-          <Text style={styles.subPrompt}>
-            Try: parliament, byward market, national gallery, rideau canal, park
-          </Text>
+        {!guideState.destination ? (
+          /* Destination input + Efficiency link */
+          <View style={styles.inputArea}>
+            <FloatingMerope modeColor={GUIDE_COLOR} size="medium" emotion={meropeEmotion} />
+            <Text style={[styles.prompt, { color: GUIDE_COLOR }]}>Where are we going?</Text>
+            <Text style={styles.subPrompt}>
+              parliament · byward market · national gallery · rideau canal · park
+            </Text>
 
-          <View style={styles.inputRow}>
-            <TextInput
-              style={styles.input}
-              value={destInput}
-              onChangeText={setDestInput}
-              onSubmitEditing={handleSetDestination}
-              placeholder="e.g. guide me to the market"
-              placeholderTextColor="#4b5563"
-              returnKeyType="go"
-            />
-            <TouchableOpacity style={styles.goBtn} onPress={handleSetDestination}>
-              <Text style={styles.goBtnText}>Go</Text>
+            <View style={styles.inputRow}>
+              <TextInput
+                style={[styles.input, { borderColor: GUIDE_COLOR + '30' }]}
+                value={destInput}
+                onChangeText={setDestInput}
+                onSubmitEditing={handleSetDestination}
+                placeholder="e.g. guide me to the market"
+                placeholderTextColor="#4b556350"
+                returnKeyType="go"
+              />
+              <TouchableOpacity style={[styles.goBtn, { backgroundColor: GUIDE_COLOR }]} onPress={handleSetDestination}>
+                <Text style={styles.goBtnText}>→</Text>
+              </TouchableOpacity>
+            </View>
+
+            {error && (
+              <GlassCard intensity="light" style={styles.errorCard}>
+                <Text style={styles.error}>{error}</Text>
+              </GlassCard>
+            )}
+
+            {/* Efficiency — navigate your day */}
+            <TouchableOpacity
+              style={styles.efficiencyBtn}
+              onPress={() => {
+                playTone('navigate')
+                tapMedium()
+                router.push('/efficiency' as any)
+              }}
+              activeOpacity={0.7}
+            >
+              <GlassCard glowColor="#0ea5e9" intensity="medium" style={styles.efficiencyCard}>
+                <View style={styles.efficiencyRow}>
+                  <Text style={styles.efficiencyIcon}>⚡</Text>
+                  <View style={styles.efficiencyInfo}>
+                    <Text style={styles.efficiencyTitle}>Efficiency</Text>
+                    <Text style={styles.efficiencyDesc}>Navigate your day — schedule, habits, routines</Text>
+                  </View>
+                  <Text style={styles.efficiencyArrow}>→</Text>
+                </View>
+              </GlassCard>
             </TouchableOpacity>
           </View>
+        ) : guideState.arrived ? (
+          /* Arrived! */
+          <View style={styles.arrivedArea}>
+            <FloatingMerope modeColor={GUIDE_COLOR} size="large" emotion="excited" />
+            <Text style={[styles.arrivedText, { color: GUIDE_COLOR }]}>We made it!</Text>
+            <Text style={styles.arrivedDest}>{guideState.destination.name}</Text>
+            <TouchableOpacity style={[styles.doneBtn, { backgroundColor: GUIDE_COLOR }]} onPress={handleClear}>
+              <Text style={styles.doneBtnText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          /* Navigation view */
+          <View style={styles.navArea}>
+            <GlassCard glowColor={GUIDE_COLOR} intensity="light" style={styles.destCard}>
+              <Text style={[styles.destName, { color: GUIDE_COLOR }]}>{guideState.destination.name}</Text>
+              <Text style={styles.destDistance}>{formatDistance(guideState.distanceM)}</Text>
+            </GlassCard>
 
-          {error && <Text style={styles.error}>{error}</Text>}
-        </View>
-      ) : guideState.arrived ? (
-        /* Arrived! */
-        <View style={styles.arrivedArea}>
-          <Text style={styles.arrivedIcon}>🎉</Text>
-          <Text style={styles.arrivedText}>You've arrived!</Text>
-          <Text style={styles.arrivedDest}>{guideState.destination.name}</Text>
-          <TouchableOpacity style={styles.doneBtn} onPress={handleClear}>
-            <Text style={styles.doneBtnText}>Done</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        /* Navigation view */
-        <View style={styles.navArea}>
-          {/* Destination name */}
-          <Text style={styles.destName}>{guideState.destination.name}</Text>
-          <Text style={styles.destDistance}>{formatDistance(guideState.distanceM)}</Text>
-
-          {/* Compass arrow */}
-          <View style={styles.compassContainer}>
-            <View style={styles.compassRing}>
-              <View
-                style={[
-                  styles.arrow,
-                  { transform: [{ rotate: `${relBearing}deg` }] },
-                ]}
-              >
-                <Text style={styles.arrowText}>▲</Text>
+            {/* Compass arrow */}
+            <View style={styles.compassContainer}>
+              <View style={[styles.compassRing, { borderColor: GUIDE_COLOR + '30' }]}>
+                <View style={[styles.compassInner, { borderColor: GUIDE_COLOR + '15' }]} />
+                <View style={[styles.arrow, { transform: [{ rotate: `${relBearing}deg` }] }]}>
+                  <Text style={[styles.arrowText, { color: GUIDE_COLOR }]}>▲</Text>
+                </View>
               </View>
+              <Text style={styles.compassLabel}>
+                {Math.abs(relBearing) < 15
+                  ? 'Straight ahead!'
+                  : relBearing > 0
+                  ? `Turn right ${Math.round(relBearing)}°`
+                  : `Turn left ${Math.round(Math.abs(relBearing))}°`}
+              </Text>
             </View>
-            <Text style={styles.compassLabel}>
-              {Math.abs(relBearing) < 15
-                ? 'Straight ahead!'
-                : relBearing > 0
-                ? `Turn right ${Math.round(relBearing)}°`
-                : `Turn left ${Math.round(Math.abs(relBearing))}°`}
-            </Text>
-          </View>
 
-          {/* Stats */}
-          <View style={styles.statsRow}>
-            <View style={styles.stat}>
-              <Text style={styles.statLabel}>BEARING</Text>
-              <Text style={styles.statValue}>{guideState.bearingDeg.toFixed(0)}°</Text>
-            </View>
-            <View style={styles.stat}>
-              <Text style={styles.statLabel}>HEADING</Text>
-              <Text style={styles.statValue}>{state.sensors.heading_deg.toFixed(0)}°</Text>
-            </View>
-            <View style={styles.stat}>
-              <Text style={styles.statLabel}>SPEED</Text>
-              <Text style={styles.statValue}>{state.sensors.speed_kmh.toFixed(1)} km/h</Text>
-            </View>
-          </View>
+            {/* Stats */}
+            <GlassCard intensity="light" style={styles.statsCard}>
+              <View style={styles.statsRow}>
+                <View style={styles.stat}>
+                  <Text style={styles.statLabel}>BEARING</Text>
+                  <Text style={[styles.statValue, { color: GUIDE_COLOR + 'cc' }]}>{guideState.bearingDeg.toFixed(0)}°</Text>
+                </View>
+                <View style={styles.stat}>
+                  <Text style={styles.statLabel}>HEADING</Text>
+                  <Text style={[styles.statValue, { color: GUIDE_COLOR + 'cc' }]}>{state.sensors.heading_deg.toFixed(0)}°</Text>
+                </View>
+                <View style={styles.stat}>
+                  <Text style={styles.statLabel}>SPEED</Text>
+                  <Text style={[styles.statValue, { color: GUIDE_COLOR + 'cc' }]}>{state.sensors.speed_kmh.toFixed(1)} km/h</Text>
+                </View>
+              </View>
+            </GlassCard>
 
-          {/* Cancel */}
-          <TouchableOpacity style={styles.cancelBtn} onPress={handleClear}>
-            <Text style={styles.cancelBtnText}>Cancel Navigation</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
+            <TouchableOpacity style={[styles.cancelBtn, { borderColor: GUIDE_COLOR + '30' }]} onPress={handleClear}>
+              <Text style={[styles.cancelBtnText, { color: GUIDE_COLOR + '80' }]}>Cancel Navigation</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    </Starfield>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0e17',
     paddingTop: Platform.OS === 'web' ? 20 : 50,
   },
   inputArea: {
     flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
     padding: 24,
     gap: 16,
   },
-  prompt: { color: '#e5e7eb', fontSize: 22, fontWeight: '700', textAlign: 'center' },
-  subPrompt: { color: '#6b7280', fontSize: 13, textAlign: 'center', lineHeight: 20 },
-  inputRow: { flexDirection: 'row', gap: 8 },
+  prompt: { fontSize: 20, fontWeight: '700', letterSpacing: 1 },
+  subPrompt: { color: '#ffffff40', fontSize: 12, textAlign: 'center', letterSpacing: 0.5 },
+  inputRow: { flexDirection: 'row', gap: 8, width: '100%' },
   input: {
     flex: 1,
-    backgroundColor: '#111827',
+    backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1,
-    borderColor: '#1f2937',
-    borderRadius: 10,
-    paddingHorizontal: 14,
+    borderRadius: 24,
+    paddingHorizontal: 18,
     paddingVertical: 14,
-    fontSize: 15,
+    fontSize: 14,
     color: '#e5e7eb',
   },
   goBtn: {
-    backgroundColor: '#10b981',
-    borderRadius: 10,
-    paddingHorizontal: 20,
+    width: 50,
+    borderRadius: 24,
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  goBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  error: { color: '#ef4444', fontSize: 12, textAlign: 'center' },
+  goBtnText: { color: '#fff', fontSize: 20, fontWeight: '700' },
+  errorCard: { padding: 10 },
+  error: { color: '#f59e0b', fontSize: 12, textAlign: 'center' },
   navArea: {
     flex: 1,
     alignItems: 'center',
@@ -202,17 +239,28 @@ const styles = StyleSheet.create({
     padding: 24,
     gap: 20,
   },
-  destName: { color: '#10b981', fontSize: 18, fontWeight: '700', letterSpacing: 1 },
-  destDistance: { color: '#e5e7eb', fontSize: 48, fontWeight: '800' },
+  destCard: {
+    padding: 16,
+    alignItems: 'center',
+    width: '100%',
+  },
+  destName: { fontSize: 14, fontWeight: '700', letterSpacing: 2, marginBottom: 4 },
+  destDistance: { color: '#e5e7eb', fontSize: 44, fontWeight: '800' },
   compassContainer: { alignItems: 'center', gap: 12 },
   compassRing: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
     borderWidth: 2,
-    borderColor: '#10b98140',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  compassInner: {
+    position: 'absolute',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 1,
   },
   arrow: {
     width: 40,
@@ -220,21 +268,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  arrowText: { color: '#10b981', fontSize: 36 },
-  compassLabel: { color: '#9ca3af', fontSize: 14, fontWeight: '600' },
-  statsRow: { flexDirection: 'row', gap: 24 },
+  arrowText: { fontSize: 36 },
+  compassLabel: { color: '#ffffff60', fontSize: 13, fontWeight: '600', letterSpacing: 0.5 },
+  statsCard: {
+    padding: 12,
+    width: '100%',
+  },
+  statsRow: { flexDirection: 'row', justifyContent: 'space-around' },
   stat: { alignItems: 'center' },
-  statLabel: { color: '#6b7280', fontSize: 9, letterSpacing: 1.5, marginBottom: 2 },
-  statValue: { color: '#e5e7eb', fontSize: 16, fontWeight: '600' },
+  statLabel: { color: '#ffffff30', fontSize: 8, letterSpacing: 1.5, marginBottom: 2 },
+  statValue: { fontSize: 16, fontWeight: '600', fontFamily: Platform.OS === 'web' ? 'monospace' : undefined },
   cancelBtn: {
     borderWidth: 1,
-    borderColor: '#374151',
-    borderRadius: 10,
-    paddingVertical: 12,
+    borderRadius: 20,
+    paddingVertical: 10,
     paddingHorizontal: 24,
-    marginTop: 12,
   },
-  cancelBtnText: { color: '#6b7280', fontSize: 13 },
+  cancelBtnText: { fontSize: 12, letterSpacing: 0.5 },
   arrivedArea: {
     flex: 1,
     justifyContent: 'center',
@@ -242,12 +292,18 @@ const styles = StyleSheet.create({
     padding: 24,
     gap: 12,
   },
-  arrivedIcon: { fontSize: 64 },
-  arrivedText: { color: '#10b981', fontSize: 28, fontWeight: '800' },
-  arrivedDest: { color: '#9ca3af', fontSize: 16 },
+  efficiencyBtn: { width: '100%', marginTop: 8 },
+  efficiencyCard: { padding: 14 },
+  efficiencyRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  efficiencyIcon: { fontSize: 24 },
+  efficiencyInfo: { flex: 1, gap: 2 },
+  efficiencyTitle: { fontSize: 15, fontWeight: '700', color: '#0ea5e9', letterSpacing: 1 },
+  efficiencyDesc: { fontSize: 11, color: '#ffffff50' },
+  efficiencyArrow: { fontSize: 18, color: '#0ea5e980' },
+  arrivedText: { fontSize: 28, fontWeight: '800', letterSpacing: 2 },
+  arrivedDest: { color: '#ffffff60', fontSize: 16, letterSpacing: 1 },
   doneBtn: {
-    backgroundColor: '#10b981',
-    borderRadius: 10,
+    borderRadius: 24,
     paddingVertical: 14,
     paddingHorizontal: 32,
     marginTop: 16,

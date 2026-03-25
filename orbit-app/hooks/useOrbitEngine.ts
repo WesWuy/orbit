@@ -101,6 +101,17 @@ export function useOrbitEngine() {
       return { success: true, message: `Searching memories for: "${intent.params.query ?? text}"` }
     }
 
+    // Efficiency is a sub-mode of Guide — switch to guide and signal efficiency
+    if (intent.type === IntentType.EFFICIENCY) {
+      const success = switchMode(Mode.GUIDE, `Efficiency: ${text}`)
+      return {
+        success,
+        message: success
+          ? 'Opening Efficiency — let me help you plan your day!'
+          : `Can't switch to guide from ${mode}`,
+      }
+    }
+
     const targetMode = MODE_MAP[intent.type]
     if (targetMode) {
       const success = switchMode(targetMode, `Command: ${text}`)
@@ -111,7 +122,7 @@ export function useOrbitEngine() {
     }
 
     if (intent.type === IntentType.UNKNOWN) {
-      return { success: false, message: "I didn't understand that. Try: focus, guide, capture, sleep." }
+      return { success: false, message: "I didn't understand that. Try: focus, guide, capture, efficiency, sleep." }
     }
 
     return { success: false, message: `Unhandled intent: ${intent.type}` }

@@ -1,11 +1,16 @@
 /**
  * AI Client — abstraction over LLM APIs.
  *
- * Supports mock mode (offline dev) and real mode (Claude/OpenAI).
+ * Supports:
+ * - MockAIClient — offline dev with canned responses
+ * - MistralAIClient — direct Mistral API calls (beta)
+ * - CloudAIClient — proxy to orbit-cloud backend (future)
+ *
  * All AI features go through this client.
  */
 
 import type { OrbitContext } from '../engine/context'
+import { getMeropeSystemPrompt } from '../engine/merope'
 
 export interface VisionResult {
   description: string
@@ -64,7 +69,6 @@ export class MockAIClient implements AIClient {
   private _chatIndex = 0
 
   async analyzeImage(_imageBase64: string, _context: OrbitContext): Promise<VisionResult> {
-    // Simulate ~1.5s API latency
     await delay(1500)
     const i = Math.floor(Math.random() * MOCK_DESCRIPTIONS.length)
     return {
@@ -94,7 +98,163 @@ export class MockAIClient implements AIClient {
   }
 }
 
-// ── Real AI Client (cloud API) ──
+// ── Mistral AI Client (direct API — beta) ──
+
+export class MistralAIClient implements AIClient {
+  private apiKey: string
+  private baseUrl = 'https://api.mistral.ai/v1'
+  private chatModel: string
+  private visionModel: string
+
+  constructor(apiKey: string, options?: { chatModel?: string; visionModel?: string }) {
+    this.apiKey = apiKey
+    this.chatModel = options?.chatModel ?? 'mistral-small-latest'
+    this.visionModel = options?.visionModel ?? 'pixtral-12b-2409'
+  }
+
+  async analyzeImage(imageBase64: string, context: OrbitContext): Promise<VisionResult> {
+    const systemPrompt = getMeropeSystemPrompt(context.mode, context)
+
+    const isRealImage = imageBase64 !== 'mock-frame' && imageBase64.length > 100
+
+    const userContent: any[] = [
+      {
+        type: 'text',
+        text: 'What do you see? Describe it in 2-3 sentences, then list the main objects you can identify.',
+      },
+    ]
+
+    if (isRealImage) {
+      userContent.unshift({
+        type: 'image_url',
+        image_url: { url: `data:image/jpeg;base64,${imageBase64}` },
+      })
+    } else {
+      userContent[0].text = 'The camera is in mock mode. Pretend you see something interesting nearby based on my location and describe it in 2-3 sentences as Merope. List 3 objects you might spot.'
+    }
+
+    const res = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: isRealImage ? this.visionModel : this.chatModel,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userContent },
+        ],
+        max_tokens: 300,
+        temperature: 0.7,
+      }),
+    })
+
+    if (!res.ok) {
+      const err = await res.text()
+      throw new Error(`Mistral API error: ${res.status} ${err}`)
+    }
+
+    const data = await res.json()
+    const text = data.choices?.[0]?.message?.content ?? 'I couldn\'t see clearly. Try again?'
+
+    // Parse objects from response (look for bullet points or comma-separated items)
+    const objects = extractObjects(text)
+
+    return {
+      description: text,
+      objects,
+    }
+  }
+
+  async chat(messages: ConversationMessage[], context: OrbitContext): Promise<string> {
+    const systemPrompt = getMeropeSystemPrompt(context.mode, context)
+
+    const mistralMessages = [
+      { role: 'system' as const, content: systemPrompt },
+      ...messages.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      })),
+    ]
+
+    const res = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.chatModel,
+        messages: mistralMessages,
+        max_tokens: 500,
+        temperature: 0.8,
+      }),
+    })
+
+    if (!res.ok) {
+      const err = await res.text()
+      throw new Error(`Mistral API error: ${res.status} ${err}`)
+    }
+
+    const data = await res.json()
+    return data.choices?.[0]?.message?.content ?? "Hmm, I lost my train of thought. What were we talking about?"
+  }
+
+  async describeCapture(imageBase64: string, context: OrbitContext): Promise<string> {
+    const systemPrompt = getMeropeSystemPrompt(context.mode, context)
+    const isRealImage = imageBase64 !== 'mock-frame' && imageBase64.length > 100
+
+    const userContent: any[] = [
+      {
+        type: 'text',
+        text: 'I want to save this moment. Write a vivid 2-3 sentence memory description that will help me remember this later. Include time of day and any location hints.',
+      },
+    ]
+
+    if (isRealImage) {
+      userContent.unshift({
+        type: 'image_url',
+        image_url: { url: `data:image/jpeg;base64,${imageBase64}` },
+      })
+    } else {
+      userContent[0].text = 'The camera is in mock mode. Based on my current location, time, and context, write a vivid 2-3 sentence memory description as if you spotted something interesting nearby.'
+    }
+
+    const res = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: isRealImage ? this.visionModel : this.chatModel,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userContent },
+        ],
+        max_tokens: 200,
+        temperature: 0.7,
+      }),
+    })
+
+    if (!res.ok) {
+      const err = await res.text()
+      throw new Error(`Mistral API error: ${res.status} ${err}`)
+    }
+
+    const data = await res.json()
+    return data.choices?.[0]?.message?.content ?? 'A moment worth remembering.'
+  }
+
+  async searchQuery(query: string): Promise<string[]> {
+    // For now, search is local (InMemoryStore handles it)
+    // In the future, this could use Mistral embeddings for semantic search
+    return [`Searching for: "${query}"`]
+  }
+}
+
+// ── Cloud AI Client (proxy backend — future) ──
 
 export class CloudAIClient implements AIClient {
   private baseUrl: string
@@ -143,6 +303,39 @@ export class CloudAIClient implements AIClient {
   }
 }
 
+// ── Helpers ──
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** Extract object labels from AI text (looks for patterns like "- tree" or "tree, bench, path") */
+function extractObjects(text: string): { label: string; confidence: number }[] {
+  // Try bullet points first: "- tree" or "* building"
+  const bulletMatches = text.match(/^[\-\*]\s+(.+)$/gm)
+  if (bulletMatches && bulletMatches.length >= 2) {
+    return bulletMatches.slice(0, 5).map((m) => ({
+      label: m.replace(/^[\-\*]\s+/, '').trim().toLowerCase(),
+      confidence: 0.85,
+    }))
+  }
+
+  // Try numbered list: "1. tree" or "1) building"
+  const numberedMatches = text.match(/^\d+[\.\)]\s+(.+)$/gm)
+  if (numberedMatches && numberedMatches.length >= 2) {
+    return numberedMatches.slice(0, 5).map((m) => ({
+      label: m.replace(/^\d+[\.\)]\s+/, '').trim().toLowerCase(),
+      confidence: 0.85,
+    }))
+  }
+
+  // Fallback: take the last sentence and split by commas
+  const sentences = text.split(/\.\s+/)
+  const lastSentence = sentences[sentences.length - 1] ?? ''
+  const commaItems = lastSentence.split(',').map((s) => s.trim().toLowerCase()).filter((s) => s.length > 2 && s.length < 30)
+  if (commaItems.length >= 2) {
+    return commaItems.slice(0, 5).map((label) => ({ label, confidence: 0.7 }))
+  }
+
+  return [{ label: 'scene', confidence: 0.5 }]
 }
