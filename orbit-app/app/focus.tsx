@@ -21,6 +21,7 @@ import { Mode } from '../engine/mode-manager'
 import { MODE_EXPERTISE, getMeropeEmotion } from '../engine/merope'
 import { playTone } from '../services/sound-engine'
 import { tapMedium, notifySuccess } from '../services/haptics'
+import { useVoicebox } from '../hooks/useVoicebox'
 
 const FOCUS_COLOR = MODE_EXPERTISE[Mode.FOCUS].color
 
@@ -29,6 +30,7 @@ export default function FocusScreen() {
   const { state } = useOrbitEngine()
   const { analyzeImage, analyzing } = useAI()
   const { merope } = useMerope(Mode.FOCUS, state.context)
+  const voicebox = useVoicebox()
   const [result, setResult] = useState<{ description: string; objects: { label: string }[] } | null>(null)
 
   const meropeEmotion = getMeropeEmotion(Mode.FOCUS, analyzing)
@@ -40,6 +42,7 @@ export default function FocusScreen() {
     setResult(vision)
     playTone('meropeReply')
     notifySuccess()
+    if (vision?.description) voicebox.speak(vision.description, 'curious')
   }
 
   return (

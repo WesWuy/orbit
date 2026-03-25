@@ -24,6 +24,7 @@ import { playTone, playModeChime, playWakeSequence } from '../services/sound-eng
 import { tapMedium, tapLight, notifySuccess, selectionTick } from '../services/haptics'
 import { getTopSuggestion, type Suggestion } from '../services/proactive-suggestions'
 import { saveConversation, getRecentContext } from '../services/conversation-store'
+import { useVoicebox } from '../hooks/useVoicebox'
 
 const MODE_ROUTES: Partial<Record<Mode, string>> = {
   [Mode.FOCUS]: '/focus',
@@ -63,6 +64,7 @@ export default function HomeScreen() {
   }, [router, splashAnim])
   const { merope, getTransitionMessage } = useMerope(state.mode, state.context)
   const { chat, chatting } = useAI()
+  const voicebox = useVoicebox()
   const [showSensors, setShowSensors] = useState(false)
   const [chatResponse, setChatResponse] = useState<string | null>(null)
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null)
@@ -121,6 +123,7 @@ export default function HomeScreen() {
       setChatResponse(result.message)
       playTone('meropePing')
       notifySuccess()
+      voicebox.speak(result.message, meropeEmotion)
       return
     }
 
@@ -135,6 +138,7 @@ export default function HomeScreen() {
     setChatResponse(response)
     playTone('meropeReply')
     notifySuccess()
+    voicebox.speak(response, meropeEmotion)
 
     // Persist conversation
     saveConversation(
@@ -194,9 +198,18 @@ export default function HomeScreen() {
             <Text style={styles.title}>Orbit</Text>
             <Text style={styles.gen}>1</Text>
           </View>
-          <TouchableOpacity onPress={toggleSensors}>
-            <Text style={[styles.statusText, { color: modeColor + '90' }]}>{state.statusLine}</Text>
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            {voicebox.connected && (
+              <TouchableOpacity onPress={voicebox.toggle} style={styles.voiceToggle}>
+                <Text style={[styles.voiceIcon, !voicebox.enabled && { opacity: 0.3 }]}>
+                  {voicebox.speaking ? '🔊' : voicebox.enabled ? '🔈' : '🔇'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={toggleSensors}>
+              <Text style={[styles.statusText, { color: modeColor + '90' }]}>{state.statusLine}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <ScrollView
@@ -354,6 +367,17 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
     borderRadius: 4,
     overflow: 'hidden',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  voiceToggle: {
+    padding: 4,
+  },
+  voiceIcon: {
+    fontSize: 14,
   },
   statusText: {
     fontSize: 11,

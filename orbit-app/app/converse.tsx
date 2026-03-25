@@ -23,6 +23,7 @@ import type { ConversationMessage } from '../services/ai-client'
 import { playTone } from '../services/sound-engine'
 import { tapLight, notifySuccess } from '../services/haptics'
 import { saveConversation, getRecentContext } from '../services/conversation-store'
+import { useVoicebox } from '../hooks/useVoicebox'
 
 const CONVERSE_COLOR = MODE_EXPERTISE[Mode.CONVERSE].color
 
@@ -37,6 +38,7 @@ export default function ConverseScreen() {
   const { state } = useOrbitEngine()
   const { chat, chatting } = useAI()
   const { merope } = useMerope(Mode.CONVERSE, state.context)
+  const voicebox = useVoicebox()
   const [input, setInput] = useState('')
   const [bubbles, setBubbles] = useState<ChatBubble[]>([
     {
@@ -78,6 +80,7 @@ export default function ConverseScreen() {
     setBubbles((prev) => [...prev, { role: 'merope', text: response, timestamp: Date.now() }])
     playTone('meropeReply')
     notifySuccess()
+    voicebox.speak(response, 'chatty')
 
     // Persist conversation
     saveConversation(messagesRef.current, Mode.CONVERSE)
@@ -92,6 +95,26 @@ export default function ConverseScreen() {
           statusLine={state.statusLine}
           onBack={() => router.back()}
         />
+
+        {/* Voice indicator */}
+        {voicebox.connected && (
+          <TouchableOpacity
+            onPress={voicebox.toggle}
+            style={styles.voiceBar}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.voiceBarIcon}>
+              {voicebox.speaking ? '🔊' : voicebox.enabled ? '🔈' : '🔇'}
+            </Text>
+            <Text style={[styles.voiceBarText, { color: voicebox.enabled ? CONVERSE_COLOR + '80' : '#ffffff30' }]}>
+              {voicebox.speaking
+                ? 'Merope is speaking...'
+                : voicebox.enabled
+                ? `Voice: ${voicebox.profileName ?? 'Active'}`
+                : 'Voice off'}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* Chat area */}
         <ScrollView
@@ -226,6 +249,15 @@ const styles = StyleSheet.create({
   meropeText: { color: '#d1d5db' },
   bubbleTime: { color: '#ffffff25', fontSize: 10, marginTop: 4, textAlign: 'right' },
   thinkingText: { fontSize: 13, fontStyle: 'italic' },
+  voiceBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+  },
+  voiceBarIcon: { fontSize: 12 },
+  voiceBarText: { fontSize: 10, letterSpacing: 0.5 },
   contextBar: {
     marginHorizontal: 12,
     marginBottom: 4,
